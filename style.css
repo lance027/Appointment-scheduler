@@ -119,3 +119,73 @@ tbody tr:hover td, table tr:not(:first-child):hover td { background: color-mix(i
 .auth form > button { display: block; margin: 8px auto 0; min-width: 160px; }
 .auth p { text-align: center; }
 .auth h2 { text-align: center; }
+
+/* ---------- mobile / responsive ---------- */
+html { -webkit-text-size-adjust: 100%; }
+body { min-height: 100vh; min-height: 100dvh; overflow-x: hidden; }
+img, svg { max-width: 100%; }
+input, select, textarea { min-width: 0; }
+input[type=date], input[type=time] { -webkit-appearance: none; appearance: none; }
+
+@media (max-width: 900px) {
+  header { padding-left: max(16px, env(safe-area-inset-left)); padding-right: max(16px, env(safe-area-inset-right)); }
+}
+
+@media (max-width: 640px) {
+  body { background-attachment: scroll; }
+  main { padding: 16px max(12px, env(safe-area-inset-right)) 24px max(12px, env(safe-area-inset-left)); }
+  footer { padding: 16px 12px calc(16px + env(safe-area-inset-bottom)); }
+
+  /* header: brand on top, tabs fill the rows below. Not sticky: too tall on phones. */
+  header { position: static; padding-top: max(10px, env(safe-area-inset-top)); padding-bottom: 10px; gap: 8px; }
+  .brand { font-size: 16px; }
+  nav { width: 100%; gap: 6px; }
+  nav button { flex: 1 1 auto; text-align: center; min-height: 40px; padding: 8px 12px; }
+  nav .account { flex: 1 1 100%; gap: 10px; }
+  .uinfo { flex: 1; min-width: 0; }
+  .uinfo b { max-width: 100%; }
+  nav button.signout { flex: none; }
+
+  h2 { font-size: 22px; margin-bottom: 14px; }
+  .hero { margin-top: 12px; }
+  .card { padding: 16px; border-radius: 14px; margin-bottom: 14px; }
+  .narrow { margin: 14px auto; }
+
+  /* inputs: 16px stops iOS zooming on focus; comfortable tap height */
+  input, select, textarea { font-size: 16px; }
+  input:not([type=checkbox]), select { height: 46px; }
+  button { min-height: 44px; }
+  button.sm { min-height: 38px; padding: 8px 14px; }
+
+  /* filter / generator rows: one field per line, full-width buttons */
+  .row { gap: 12px; align-items: stretch; }
+  .row label { flex: 1 1 100%; min-width: 0; }
+  .row > button { flex: 1 1 100%; }
+  .row > label:has(input[type=checkbox]) { flex: 1 1 100% !important; display: flex; align-items: center; gap: 10px; }
+  .row input[type=checkbox] { width: 20px !important; height: 20px; margin: 0; flex: none; }
+  form > button, form > button + button { width: 100%; margin-top: 8px; }
+  .auth form > button { min-width: 0; }
+
+  .stats { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .stat { padding: 14px; }
+  .stat b { font-size: 26px; }
+
+  /* tables become stacked cards */
+  .card.wrap { overflow: visible; background: transparent; border: 0; box-shadow: none; padding: 0; }
+  .wrap table, .wrap tbody { display: block; width: 100%; }
+  .wrap tr.thead { display: none; }
+  .wrap tr { display: block; background: var(--card); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); padding: 6px 14px; margin-bottom: 12px; }
+  .wrap td { display: block; position: relative; min-height: 28px; padding: 8px 0 8px 96px; border-bottom: 1px solid var(--line); text-align: left; word-break: break-word; }
+  .wrap td::before { content: attr(data-label); position: absolute; left: 0; top: 9px; width: 84px; font-size: 11.5px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+  .wrap td:last-child { border-bottom: 0; }
+  .wrap td[data-label=""] { padding-left: 0; }
+  .wrap td[data-label=""]::before { content: none; }
+  .wrap td button { margin: 2px 6px 2px 0; }
+  .wrap tr:hover td { background: transparent !important; }
+  .card.wrap > p { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px; margin: 0; }
+}
+
+@media (max-width: 360px) {
+  .wrap td { padding-left: 82px; }
+  .wrap td::before { width: 72px; }
+}

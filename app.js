@@ -298,6 +298,19 @@ function render() {
   renderNav();
   $('#app').innerHTML = (msg ? `<div class="alert ${msg.t}">${esc(msg.m)}</div>` : '') + html;
   msg = null;
+  labelTables();
+}
+// Mobile: copy each column header onto its cells so CSS can show them as stacked cards.
+function labelTables() {
+  document.querySelectorAll('#app table').forEach(t => {
+    const head = t.querySelector('tr');
+    if (!head || !head.querySelector('th')) return;
+    head.classList.add('thead');
+    const labels = [...head.children].map(h => h.textContent.trim());
+    t.querySelectorAll('tr:not(.thead)').forEach(r => [...r.children].forEach((td, i) => {
+      td.dataset.label = td.colSpan > 1 ? '' : (labels[i] || '');
+    }));
+  });
 }
 if (me) view = me.role === 'admin' ? 'dash' : 'slots';
 render();
