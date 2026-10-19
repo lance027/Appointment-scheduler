@@ -114,3 +114,8 @@ tbody tr:hover td, table tr:not(:first-child):hover td { background: color-mix(i
 .muted { color: var(--muted); font-size: 13px; }
 @media (max-width: 900px) { header { flex-wrap: wrap; } }
 @media (max-width: 640px) { main { padding: 18px 14px; } h2 { font-size: 22px; } nav { width: 100%; } nav .account { margin: 6px 0 0; padding: 8px 0 0; border-left: 0; border-top: 1px solid var(--line); width: 100%; } }
+
+/* sign in / register: centered button and text */
+.auth form > button { display: block; margin: 8px auto 0; min-width: 160px; }
+.auth p { text-align: center; }
+.auth h2 { text-align: center; }

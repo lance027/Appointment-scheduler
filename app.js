@@ -59,13 +59,13 @@ function go(v, id = null) { view = v; sel = id; render(); window.scrollTo(0, 0);
 // ---------- views ----------
 const views = {
   login: () => `<div class="hero"><h1>Book appointments, <span>effortlessly.</span></h1><p>Pick a time, send your request, and track its status in one place.</p></div>
-    <div class="card narrow"><h2>Sign in</h2>
+    <div class="card narrow auth"><h2>Sign in</h2>
     <form data-form="login"><label>Email<input name="email" type="email" required></label>
     <label>Password<input name="password" type="password" required></label><button>Sign in</button></form>
     <p>No account? <a data-act="go" data-id="register">Register</a></p>
-    <p class="muted">Demo admin: admin@example.com / admin123</p></div>`,
+    </p></div>`,
 
-  register: () => `<div class="card narrow"><h2>Create account</h2>
+  register: () => `<div class="card narrow auth"><h2>Create account</h2>
     <form data-form="register"><label>Full name<input name="name" required minlength="2" maxlength="100"></label>
     <label>Email<input name="email" type="email" required></label>
     <label>Phone (optional)<input name="phone"></label>
