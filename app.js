@@ -52,9 +52,11 @@ const badge = s => `<span class="badge ${s}">${s}</span>`;
 
 // ---------- state ----------
 let view = 'login', sel = null, msg = null;
+let lim = { slots: 30, adminSlots: 30 };
+const more = (key, n) => n > 0 ? `<p style="text-align:center"><button class="grey" data-act="more" data-id="${key}">Show more (${n} remaining)</button></p>` : '';
 let f = { service: '', date: '', q: '', status: '' };
 const flash = (m, t = 'ok') => { msg = { m, t }; };
-function go(v, id = null) { view = v; sel = id; render(); window.scrollTo(0, 0); }
+function go(v, id = null) { view = v; sel = id; lim = { slots: 30, adminSlots: 30 }; render(); window.scrollTo(0, 0); }
 
 // ---------- views ----------
 const views = {
@@ -63,7 +65,7 @@ const views = {
     <form data-form="login"><label>Email<input name="email" type="email" required></label>
     <label>Password<input name="password" type="password" required></label><button>Sign in</button></form>
     <p>No account? <a data-act="go" data-id="register">Register</a></p>
-    </p></div>`,
+    <p class="muted">Demo admin: admin@example.com / admin123</p></div>`,
 
   register: () => `<div class="card narrow auth"><h2>Create account</h2>
     <form data-form="register"><label>Full name<input name="name" required minlength="2" maxlength="100"></label>
@@ -74,16 +76,17 @@ const views = {
     <p>Already registered? <a data-act="go" data-id="login">Sign in</a></p></div>`,
 
   slots() {
-    const rows = db.slots.filter(s => svcOf(s.svcId).active && isFuture(s) && !isBooked(s) &&
+    const all = db.slots.filter(s => svcOf(s.svcId).active && isFuture(s) && !isBooked(s) &&
       (!f.service || s.svcId === +f.service) && (!f.date || s.date === f.date))
-      .sort((a, b) => (a.date + a.start).localeCompare(b.date + b.start)).slice(0, 200);
-    return `<h2>Available slots</h2><form class="row card" data-form="filter">
+      .sort((a, b) => (a.date + a.start).localeCompare(b.date + b.start));
+    const rows = all.slice(0, lim.slots);
+    return `<h2><center>Available slots</center></h2><form class="row card" data-form="filter">
       <label>Service<select name="service"><option value="">All</option>${db.services.filter(s => s.active).map(s => `<option value="${s.id}" ${f.service == s.id ? 'selected' : ''}>${esc(s.name)}</option>`).join('')}</select></label>
       <label>Date<input type="date" name="date" min="${iso(new Date())}" value="${f.date}"></label><button>Filter</button>
       <button type="button" class="grey" data-act="resetFilter">Reset</button></form>
       <div class="card wrap">${rows.length ? `<table><tr><th>Date</th><th>Time</th><th>Service</th><th></th></tr>${rows.map(s =>
         `<tr><td>${fdate(s.date)}</td><td>${ftime(s.start)} – ${ftime(s.end)}</td><td>${esc(svcOf(s.svcId).name)}</td>
-        <td><button class="sm" data-act="book" data-id="${s.id}">Book</button></td></tr>`).join('')}</table>` : '<p>No available slots match.</p>'}</div>`;
+        <td><button class="sm" data-act="book" data-id="${s.id}">Book</button></td></tr>`).join('')}</table>` : '<p>No available slots match.</p>'}</div>${more('slots', all.length - rows.length)}`;
   },
 
   book() {
@@ -97,7 +100,7 @@ const views = {
 
   my() {
     const rows = db.appts.filter(a => a.uid === me.id).sort((a, b) => b.id - a.id);
-    return `<h2>My appointments</h2><div class="card wrap">${rows.length ? `<table><tr><th>Date</th><th>Time</th><th>Service</th><th>Purpose</th><th>Status</th><th></th></tr>${rows.map(a => {
+    return `<h2><center>My appointments</center></h2><div class="card wrap">${rows.length ? `<table><tr><th>Date</th><th>Time</th><th>Service</th><th>Purpose</th><th>Status</th><th></th></tr>${rows.map(a => {
       const s = slotOf(a.slotId);
       return `<tr><td>${fdate(s.date)}</td><td>${ftime(s.start)}</td><td>${esc(svcOf(s.svcId).name)}</td>
       <td>${purposeOf(a)}${a.note ? `<div class="muted">Note: ${esc(a.note)}</div>` : ''}</td><td>${badge(a.status)}</td>
@@ -108,14 +111,14 @@ const views = {
   notes() {
     const rows = db.notes.filter(n => n.uid === me.id).sort((a, b) => b.id - a.id);
     rows.forEach(n => n.read = true); save(); renderNav();
-    return `<h2>Notifications</h2><div class="card">${rows.length ? rows.map(n => `<p>${esc(n.text)}<br><span class="muted">${n.at}</span></p>`).join('') : '<p>No notifications.</p>'}</div>`;
+    return `<h2><center>Notifications</center></h2><div class="card">${rows.length ? rows.map(n => `<p>${esc(n.text)}<br><span class="muted">${n.at}</span></p>`).join('') : '<p>No notifications.</p>'}</div>`;
   },
 
   dash() {
     const c = s => db.appts.filter(a => a.status === s).length;
     const today = db.appts.filter(a => isActive(a) && slotOf(a.slotId).date === iso(new Date()));
     const pend = db.appts.filter(a => a.status === 'pending').slice(0, 8);
-    const li = a => { const s = slotOf(a.slotId); return `<p>${fdate(s.date)} ${ftime(s.start)} · ${esc(userOf(a.uid).name)} ${badge(a.status)} <button class="sm" data-act="open" data-id="${a.id}">Open</button></p>`; };
+    const li = a => { const s = slotOf(a.slotId); return `<div class="item"><div>${esc(userOf(a.uid).name)}<small>${fdate(s.date)}, ${ftime(s.start)} · ${esc(svcOf(s.svcId).name)}</small></div><div class="actions">${badge(a.status)}<button class="sm" data-act="open" data-id="${a.id}">Open</button></div></div>`; };
     return `<h2>Dashboard</h2><div class="stats">
       ${[['Pending', c('pending')], ['Confirmed', c('confirmed')], ['Completed', c('completed')], ['Cancelled', c('cancelled')],
         ['Open slots', db.slots.filter(s => isFuture(s) && !isBooked(s)).length], ['Customers', db.users.filter(u => u.role === 'customer').length]]
@@ -143,7 +146,7 @@ const views = {
 
   appt() {
     const a = db.appts.find(x => x.id === +sel), s = slotOf(a.slotId), u = userOf(a.uid), opts = FLOW[a.status];
-    return `<p><a data-act="go" data-id="appts">← Back to records</a></p><div class="card"><h2>Appointment #${a.id} ${badge(a.status)}</h2>
+    return `<p><a class="back" data-act="go" data-id="appts">← Back to records</a></p><div class="card"><h2>Appointment #${a.id} ${badge(a.status)}</h2>
       <p><b>Customer:</b> ${esc(u.name)} (${esc(u.email)}${u.phone ? ', ' + esc(u.phone) : ''})<br>
       <b>Service:</b> ${esc(svcOf(s.svcId).name)}<br><b>Schedule:</b> ${fdate(s.date)}, ${ftime(s.start)} – ${ftime(s.end)}<br>
       <b>Purpose:</b> ${purposeOf(a)}<br><b>Notes:</b> ${esc(a.notes) || '—'}<br><b>Requested:</b> ${a.at}</p></div>
@@ -153,7 +156,8 @@ const views = {
   },
 
   adminSlots() {
-    const rows = db.slots.filter(s => s.date >= iso(new Date())).sort((a, b) => (a.date + a.start).localeCompare(b.date + b.start)).slice(0, 300);
+    const all = db.slots.filter(s => s.date >= iso(new Date())).sort((a, b) => (a.date + a.start).localeCompare(b.date + b.start));
+    const rows = all.slice(0, lim.adminSlots);
     const t = iso(new Date());
     return `<h2>Manage availability</h2><form class="card" data-form="genSlots"><h3>Generate time slots</h3><div class="row">
       <label>Service<select name="svc">${db.services.filter(s => s.active).map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join('')}</select></label>
@@ -161,20 +165,20 @@ const views = {
       <label>From<input type="date" name="d1" min="${t}" value="${t}" required></label><label>To (max 31 days)<input type="date" name="d2" min="${t}" value="${t}" required></label></div><br><div class="row">
       <label>Start<input type="time" name="t1" value="09:00" required></label><label>End<input type="time" name="t2" value="17:00" required></label>
       <label>Length (min)<input type="number" name="len" value="60" min="5" max="240" required></label>
-      <label style="flex:0"><input type="checkbox" name="wk" style="display:inline;width:auto" checked> Skip weekends</label><button>Create</button></div></form>
-      <div class="card wrap"><table><tr><th>Date</th><th>Time</th><th>Service</th><th>Availability</th><th></th></tr>${rows.map(s => {
+      <label class="check"><input type="checkbox" name="wk" checked> Skip weekends</label><button>Create</button></div></form>
+      <div class="card wrap"><table><tr><th>Date</th><th>Time</th><th>Service</th><th>Status</th><th></th></tr>${rows.map(s => {
         const b = db.appts.find(a => a.slotId === s.id && isActive(a)), hist = db.appts.some(a => a.slotId === s.id);
         return `<tr><td>${fdate(s.date)}</td><td>${ftime(s.start)} – ${ftime(s.end)}</td><td>${esc(svcOf(s.svcId).name)}</td>
         <td>${b ? badge(b.status) : '<span class="badge completed">open</span>'}</td>
         <td><button class="sm" data-act="editSlot" data-id="${s.id}">Edit</button> ${hist ? '' : `<button class="sm red" data-act="delSlot" data-id="${s.id}">Delete</button>`}</td></tr>`;
-      }).join('') || '<tr><td colspan="5">No slots yet.</td></tr>'}</table></div>`;
+      }).join('') || '<tr><td colspan="5">No slots yet.</td></tr>'}</table></div>${more('adminSlots', all.length - rows.length)}`;
   },
 
   editSlot() {
     const s = slotOf(sel);
     if (!s) return views.adminSlots();
     const bk = db.appts.find(a => a.slotId === s.id && isActive(a));
-    return `<p><a data-act="go" data-id="adminSlots">← Back to schedules</a></p><div class="card narrow" style="margin:0 auto"><h2>Edit slot</h2>
+    return `<p><a class="back" data-act="go" data-id="adminSlots">← Back to schedules</a></p><div class="card narrow" style="margin:0 auto"><h2>Edit slot</h2>
       ${bk ? `<div class="alert info">Booked by ${esc(userOf(bk.uid).name)}. They will be notified of any change.</div>` : ''}
       <form data-form="editSlot"><label>Service<select name="svc">${db.services.map(x => `<option value="${x.id}" ${x.id === s.svcId ? 'selected' : ''}>${esc(x.name)}${x.active ? '' : ' (hidden)'}</option>`).join('')}</select></label>
       <label>Or type a service<input name="svcNew" maxlength="80" placeholder="New or existing name"></label>
@@ -210,7 +214,7 @@ const forms = {
     me = { id: db.n++, name: d.name.trim(), email, phone: d.phone.trim(), password: d.password, role: 'customer' };
     db.users.push(me); save(); localStorage.setItem(SES, me.id); flash('Welcome! Account created.'); go('slots');
   },
-  filter(d) { f.service = d.service; f.date = d.date; render(); },
+  filter(d) { f.service = d.service; f.date = d.date; lim.slots = 30; render(); },
   apptFilter(d) { f.q = d.q.trim(); f.status = d.status; render(); },
   book(d) {
     const s = slotOf(sel);
@@ -263,6 +267,7 @@ const forms = {
 const clicks = {
   go: id => go(id),
   book: id => go('book', +id),
+  more: key => { lim[key] += 30; render(); },
   open: id => go('appt', +id),
   editSlot: id => go('editSlot', +id),
   resetFilter: () => { f = { service: '', date: '', q: '', status: '' }; render(); },
@@ -280,14 +285,24 @@ document.addEventListener('click', e => { const b = e.target.closest('[data-act]
 
 // ---------- render ----------
 function renderNav() {
-  const tab = (v, label) => `<button class="${view === v ? 'on' : ''}" data-act="go" data-id="${v}">${label}</button>`;
+  const cur = { appt: 'appts', editSlot: 'adminSlots', book: 'slots' }[view] || view;
+  const tab = (v, label) => `<button class="${cur === v ? 'on' : ''}" data-act="go" data-id="${v}">${label}</button>`;
   const unread = me ? db.notes.filter(n => n.uid === me.id && !n.read).length : 0;
   $('#nav').innerHTML = !me ? tab('login', 'Sign in') + tab('register', 'Register')
-    : (me.role === 'admin' ? tab('dash', 'Dashboard') + tab('appts', 'Appointments') + tab('adminSlots', 'Schedules') + tab('services', 'Services')
-      : tab('slots', 'Book') + tab('my', 'My Appointments') + tab('notes', 'Notifications' + (unread ? ` (${unread})` : '')))
-      + `<div class="account"><span class="avatar">${esc(me.name.trim().charAt(0).toUpperCase())}</span>
-        <span class="uinfo"><b>${esc(me.name)}</b><small>${me.role === 'admin' ? 'Admin account' : 'Customer account'}</small></span>
-        <button class="sm signout" data-act="logout" title="Sign out">Sign out</button></div>`;
+    : me.role === 'admin' ? tab('dash', 'Dashboard') + tab('appts', 'Appointments') + tab('adminSlots', 'Schedules') + tab('services', 'Services')
+    : tab('slots', 'Book') + tab('my', 'My Appointments') + tab('notes', 'Notifications' + (unread ? ` (${unread})` : ''));
+  const nv = $('#nav'), on = nv.querySelector && nv.querySelector('.on');
+  if (on && nv.scrollWidth > nv.clientWidth) nv.scrollLeft = on.offsetLeft - (nv.clientWidth - on.offsetWidth) / 2;
+  $('#acct').innerHTML = me ? `<div class="account"><span class="avatar">${esc(me.name.trim().charAt(0).toUpperCase())}</span>
+    <span class="uinfo"><b>${esc(me.name)}</b><small>${me.role === 'admin' ? 'Admin account' : 'Customer account'}</small></span>
+    <button class="sm signout" data-act="logout" title="Sign out">Sign out</button></div>` : '';
+}
+// label every table cell with its column name so tables can stack into cards on phones
+function labelTables() {
+  document.querySelectorAll('#app table').forEach(t => {
+    const heads = [...t.rows[0].cells].map(c => c.textContent.trim());
+    [...t.rows].slice(1).forEach(r => [...r.cells].forEach((c, i) => { if (heads[i] && c.colSpan === 1) c.dataset.label = heads[i]; }));
+  });
 }
 function render() {
   const adminViews = ['dash', 'appts', 'appt', 'adminSlots', 'editSlot', 'services'], publicViews = ['login', 'register'];
@@ -299,18 +314,6 @@ function render() {
   $('#app').innerHTML = (msg ? `<div class="alert ${msg.t}">${esc(msg.m)}</div>` : '') + html;
   msg = null;
   labelTables();
-}
-// Mobile: copy each column header onto its cells so CSS can show them as stacked cards.
-function labelTables() {
-  document.querySelectorAll('#app table').forEach(t => {
-    const head = t.querySelector('tr');
-    if (!head || !head.querySelector('th')) return;
-    head.classList.add('thead');
-    const labels = [...head.children].map(h => h.textContent.trim());
-    t.querySelectorAll('tr:not(.thead)').forEach(r => [...r.children].forEach((td, i) => {
-      td.dataset.label = td.colSpan > 1 ? '' : (labels[i] || '');
-    }));
-  });
 }
 if (me) view = me.role === 'admin' ? 'dash' : 'slots';
 render();
