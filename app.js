@@ -65,7 +65,8 @@ const views = {
     <form data-form="login"><label>Email<input name="email" type="email" required></label>
     <label>Password<input name="password" type="password" required></label><button>Sign in</button></form>
     <p>No account? <a data-act="go" data-id="register">Register</a></p>
-    <p class="muted">Demo admin: admin@example.com / admin123</p></div>`,
+    <p class="muted">
+  </p></div>`,
 
   register: () => `<div class="card narrow auth"><h2>Create account</h2>
     <form data-form="register"><label>Full name<input name="name" required minlength="2" maxlength="100"></label>
