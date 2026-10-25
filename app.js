@@ -1,6 +1,15 @@
 // Appointment Scheduler - plain JavaScript, data saved in the browser (localStorage).
 const KEY = 'sched_db', SES = 'sched_session';
 const FLOW = { pending: ['confirmed', 'cancelled'], confirmed: ['completed', 'cancelled'], completed: [], cancelled: [] };
+// EmailJS settings (emailjs.com). Template must use {{to_email}} and {{code}}.
+const EMAILJS = { service: 'service_7ceyq8r', template: 'template_0dogs9j', key: 'deyj_x1nuMJdotNPe' };
+async function sendResetEmail(to, code) {
+  const r = await fetch('https://api.emailjs.com/api/v1.0/email/send', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ service_id: EMAILJS.service, template_id: EMAILJS.template, user_id: EMAILJS.key, template_params: { to_email: to, code } })
+  });
+  if (!r.ok) throw new Error(await r.text());
+}
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const pad = n => String(n).padStart(2, '0');
@@ -71,47 +80,12 @@ const badge = s => `<span class="badge ${s}">${s}</span>`;
 
 // ---------- state ----------
 let view = 'login', sel = null, msg = null;
+let rs = { email: '' };   // password-reset in progress
 let lim = { slots: 30, adminSlots: 30 };
 const more = (key, n) => n > 0 ? `<p style="text-align:center"><button class="grey" data-act="more" data-id="${key}">Show more (${n} remaining)</button></p>` : '';
 let f = { service: '', date: '', q: '', status: '' };
 const flash = (m, t = 'ok') => { msg = { m, t }; };
 function go(v, id = null) { view = v; sel = id; lim = { slots: 30, adminSlots: 30 }; render(); window.scrollTo(0, 0); }
-
-// ---------- email OTP (registration) ----------
-// To send real emails, create a free EmailJS account (emailjs.com), add an email service and a template that uses
-// {{to_email}}, {{to_name}}, {{otp}} and {{expires_min}}, then paste the three IDs below.
-// While these are empty the app runs in DEMO MODE and shows the code on screen instead of emailing it.
-const EMAILJS = { serviceId: 'service_d9uip0n', templateId: 'template_4thy8ya', publicKey: '0ei-9M10Y6XHMF2o1' };
-const OTP_MINUTES = 10, OTP_MAX_TRIES = 5, OTP_RESEND_SECS = 30, PKEY = 'sched_pending';
-let pending = (() => { try { return JSON.parse(sessionStorage.getItem(PKEY) || 'null'); } catch { return null; } })();
-let sendingOtp = false;
-const savePending = () => { try { pending ? sessionStorage.setItem(PKEY, JSON.stringify(pending)) : sessionStorage.removeItem(PKEY); } catch {} };
-const newCode = () => String(crypto.getRandomValues(new Uint32Array(1))[0] % 1000000).padStart(6, '0');
-const maskEmail = e => e.replace(/^(.).*(@.*)$/, (_, a, b) => a + '•••' + b);
-async function deliverOtp(p) {
-  if (!EMAILJS.serviceId || !EMAILJS.templateId || !EMAILJS.publicKey) { p.demo = true; return; }
-  p.demo = false;
-  const res = await fetch('https://api.emailjs.com/api/v1.0/email/send', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ service_id: EMAILJS.serviceId, template_id: EMAILJS.templateId, user_id: EMAILJS.publicKey,
-      template_params: { to_email: p.email, to_name: p.name, otp: p.code, expires_min: OTP_MINUTES } })
-  });
-  if (!res.ok) { const t = await res.text().catch(() => ''); throw new Error(res.status + ' ' + t.slice(0, 160)); }
-}
-async function issueOtp(p, isResend) {
-  if (sendingOtp) return;
-  sendingOtp = true;
-  try {
-    const next = { ...p, code: newCode(), exp: Date.now() + OTP_MINUTES * 60000, tries: 0, sent: Date.now() };
-    await deliverOtp(next);
-    pending = next; savePending();
-    flash(next.demo ? 'Demo mode: the code is shown below.' : `We sent a 6-digit code to ${maskEmail(next.email)}.`, 'ok');
-    isResend ? render() : go('verify');
-  } catch (e) {
-    console.error('EmailJS error:', e);
-    flash('Could not send the verification email. Reason: ' + ((e && e.message) || 'unknown'), 'err'); render();
-  } finally { sendingOtp = false; }
-}
 
 // ---------- views ----------
 const views = {
@@ -119,8 +93,26 @@ const views = {
     <div class="card narrow auth"><center><h2>Sign in</h2></center>
     <form data-form="login"><label>Email<input name="email" type="email" required></label>
     <label>Password<input name="password" type="password" required></label><button>Sign in</button></form>
+    <p><a data-act="go" data-id="forgot">Forgot password?</a></p>
     <p>No account? <a data-act="go" data-id="register">Register</a></p>
     <p class="muted"></p></div>`,
+
+  forgot: () => `<div class="card narrow auth"><h2>Forgot password</h2>
+    <p class="muted">Enter the email you registered with and we'll give you a code to reset your password.</p>
+    <form data-form="forgot"><label>Email<input name="email" type="email" required autocomplete="email"></label>
+    <button>Get reset code</button></form>
+    <p><a data-act="go" data-id="login">Back to sign in</a></p></div>`,
+
+  reset() {
+    if (!rs.email) return views.forgot();
+    return `<div class="card narrow auth"><h2>Reset password</h2>
+    <p class="muted">Resetting the password for <b>${esc(rs.email)}</b></p>
+    <form data-form="reset"><label>6-digit code<input name="code" inputmode="numeric" autocomplete="one-time-code" required minlength="6" maxlength="6" pattern="[0-9]{6}"></label>
+    <label>New password (min 8)<input name="password" type="password" required minlength="8" autocomplete="new-password"></label>
+    <label>Confirm new password<input name="confirm" type="password" required autocomplete="new-password"></label>
+    <button>Reset password</button></form>
+    <p><a data-act="go" data-id="forgot">Request a new code</a> &nbsp;·&nbsp; <a data-act="go" data-id="login">Back to sign in</a></p></div>`;
+  },
 
   register: () => `<div class="card narrow auth"><h2>Create account</h2>
     <form data-form="register"><label>Full name<input name="name" required minlength="2" maxlength="100"></label>
@@ -129,16 +121,6 @@ const views = {
     <label>Password (min 8)<input name="password" type="password" required minlength="8"></label>
     <label>Confirm password<input name="confirm" type="password" required></label><button>Register</button></form>
     <p>Already registered? <a data-act="go" data-id="login">Sign in</a></p></div>`,
-
-  verify() {
-    const p = pending;
-    return `<div class="card narrow auth"><h2>Verify your email</h2>
-    <p class="muted">Enter the 6-digit code for <b>${esc(p.email)}</b>. It expires in ${OTP_MINUTES} minutes.</p>
-    ${p.demo ? `<div class="alert info">Demo mode: no email service is set up, so your code is <b>${esc(p.code)}</b>.</div>` : ''}
-    <form data-form="verify"><label>Verification code<input name="code" required inputmode="numeric" pattern="[0-9]{6}" maxlength="6" minlength="6" autocomplete="one-time-code" placeholder="123456" style="letter-spacing:.35em;text-align:center;font-size:20px"></label>
-    <button>Verify &amp; create account</button></form>
-    <p>Didn't get it? <a data-act="resendOtp">Resend code</a> · <a data-act="cancelOtp">Change details</a></p></div>`;
-  },
 
   slots() {
     const all = db.slots.filter(s => svcOf(s.svcId).active && isFuture(s) && !isBooked(s) &&
@@ -279,6 +261,41 @@ const forms = {
     if (!u) { flash('Incorrect email or password.', 'err'); return render(); }
     me = u; localStorage.setItem(SES, u.id); go(u.role === 'admin' ? 'dash' : 'slots');
   },
+  async forgot(d) {
+    const email = d.email.trim().toLowerCase(), u = db.users.find(x => x.email === email);
+    if (!u) { flash('No account was found with that email.', 'err'); return render(); }
+    const btn = document.querySelector('form[data-form="forgot"] button');
+    if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
+    const buf = new Uint32Array(1); crypto.getRandomValues(buf);
+    const code = String(buf[0] % 1000000).padStart(6, '0');
+    try {
+      await sendResetEmail(email, code);
+    } catch (e) {
+      console.error('EmailJS error:', e);
+      flash('Could not send the email. Please check your connection and try again.', 'err'); return render();
+    }
+    sync();
+    const u2 = db.users.find(x => x.email === email);
+    if (!u2) { flash('No account was found with that email.', 'err'); return render(); }
+    u2.reset = { code, exp: Date.now() + 15 * 60 * 1000, tries: 0 };
+    save(); rs = { email }; flash('We sent a 6-digit code to ' + email + '. Check your inbox (and spam folder).');
+    view = 'reset'; render();
+  },
+  reset(d) {
+    const u = db.users.find(x => x.email === rs.email);
+    if (!u || !u.reset) { flash('Please request a new reset code.', 'err'); return go('forgot'); }
+    if (Date.now() > u.reset.exp) { delete u.reset; save(); flash('That code has expired. Please request a new one.', 'err'); return go('forgot'); }
+    if (d.code.trim() !== u.reset.code) {
+      u.reset.tries++;
+      if (u.reset.tries >= 5) { delete u.reset; save(); flash('Too many wrong codes. Please request a new one.', 'err'); return go('forgot'); }
+      save(); flash('Incorrect code. ' + (5 - u.reset.tries) + ' attempt(s) left.', 'err'); return render();
+    }
+    if (d.password.length < 8) { flash('Password must be at least 8 characters.', 'err'); return render(); }
+    if (d.password !== d.confirm) { flash('Passwords do not match.', 'err'); return render(); }
+    u.password = d.password; delete u.reset; save();
+    rs = { email: '' };
+    flash('Password updated. You can now sign in with your new password.'); go('login');
+  },
   register(d) {
     const email = d.email.trim().toLowerCase(), err = [];
     if (d.name.trim().length < 2) err.push('Enter your name.');
@@ -288,22 +305,8 @@ const forms = {
     if (d.password !== d.confirm) err.push('Passwords do not match.');
     if (db.users.some(u => u.email === email)) err.push('That email is already registered.');
     if (err.length) { flash(err.join(' '), 'err'); return render(); }
-    // account is only created after the emailed code is verified
-    return issueOtp({ name: d.name.trim(), email, phone: d.phone.trim(), password: d.password }, false);
-  },
-  verify(d) {
-    const p = pending;
-    if (!p) { flash('Your verification expired. Please register again.', 'err'); return go('register'); }
-    if (Date.now() > p.exp) { flash('That code has expired. Tap "Resend code" to get a new one.', 'err'); return render(); }
-    if (String(d.code).trim() !== p.code) {
-      p.tries++;
-      if (p.tries >= OTP_MAX_TRIES) { pending = null; savePending(); flash('Too many wrong attempts. Please register again.', 'err'); return go('register'); }
-      savePending(); flash(`Incorrect code. ${OTP_MAX_TRIES - p.tries} attempt(s) left.`, 'err'); return render();
-    }
-    if (db.users.some(u => u.email === p.email)) { pending = null; savePending(); flash('That email is already registered.', 'err'); return go('register'); }
-    me = { id: db.n++, name: p.name, email: p.email, phone: p.phone, password: p.password, role: 'customer' };
-    db.users.push(me); save(); pending = null; savePending();
-    localStorage.setItem(SES, me.id); flash('Email verified. Welcome! Account created.'); go('slots');
+    me = { id: db.n++, name: d.name.trim(), email, phone: d.phone.trim(), password: d.password, role: 'customer' };
+    db.users.push(me); save(); localStorage.setItem(SES, me.id); flash('Welcome! Account created.'); go('slots');
   },
   filter(d) { f.service = d.service; f.date = d.date; lim.slots = 30; render(); },
   apptFilter(d) { f.q = d.q.trim(); f.status = d.status; render(); },
@@ -374,13 +377,6 @@ const forms = {
 };
 const clicks = {
   go: id => go(id),
-  resendOtp() {
-    if (!pending) return go('register');
-    const wait = Math.ceil((pending.sent + OTP_RESEND_SECS * 1000 - Date.now()) / 1000);
-    if (wait > 0) { flash(`Please wait ${wait}s before requesting another code.`, 'err'); return render(); }
-    issueOtp(pending, true);
-  },
-  cancelOtp() { pending = null; savePending(); go('register'); },
   book: id => go('book', +id),
   more: key => { lim[key] += 30; render(); },
   open: id => go('appt', +id),
@@ -448,7 +444,7 @@ window.addEventListener('storage', e => {
 
 // ---------- render ----------
 function renderNav() {
-  const cur = { appt: 'appts', editSlot: 'adminSlots', editSvc: 'services', book: 'slots', verify: 'register' }[view] || view;
+  const cur = { appt: 'appts', editSlot: 'adminSlots', editSvc: 'services', book: 'slots', forgot: 'login', reset: 'login' }[view] || view;
   const tab = (v, label) => `<button class="${cur === v ? 'on' : ''}" data-act="go" data-id="${v}">${label}</button>`;
   const unread = me ? db.notes.filter(n => n.uid === me.id && !n.read).length : 0;
   $('#nav').className = me ? '' : 'auth-nav';
@@ -469,8 +465,7 @@ function labelTables() {
   });
 }
 function render() {
-  const adminViews = ['dash', 'appts', 'appt', 'adminSlots', 'editSlot', 'services', 'editSvc'], publicViews = ['login', 'register', 'verify'];
-  if (view === 'verify' && !pending) view = 'register';
+  const adminViews = ['dash', 'appts', 'appt', 'adminSlots', 'editSlot', 'services', 'editSvc'], publicViews = ['login', 'register', 'forgot', 'reset'];
   if (!me && !publicViews.includes(view)) view = 'login';
   if (me && publicViews.includes(view)) view = me.role === 'admin' ? 'dash' : 'slots';
   if (me && (me.role === 'admin') !== adminViews.includes(view) && !publicViews.includes(view)) view = me.role === 'admin' ? 'dash' : 'slots';
